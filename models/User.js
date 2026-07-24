@@ -56,7 +56,10 @@ const userSchema = new mongoose.Schema({
     github: { username: { type: String } },
     youtube: { channelId: { type: String } }
   },
-
+   refreshToken: {
+   type: String,
+   default: null
+   },
   isPublished: { type: Boolean, default: true },
 
   isDeleted: { type: Boolean, default: false },

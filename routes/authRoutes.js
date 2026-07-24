@@ -15,6 +15,8 @@ const {
   getSocials,
   addSocials,
   getUsername,
+  refreshToken,
+  logout
 } = require('../controllers/authController');
 
 const { protect } = require('../middleware/authMiddleware');
@@ -23,6 +25,8 @@ const upload = require('../middleware/uploadMiddleware');
 router.post('/register', registerUser);
 router.post('/login', loginUser);
 router.post('/oauth-sync', oauthSync);
+router.post("/refresh-token", refreshToken);
+router.post("/logout", logout);
 
 router.put('/set-username', protect, setUsername);
 router.get('/check-username/:username', checkUsernameAvailability);

@@ -3,25 +3,70 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+  return jwt.sign(
+    { id },
+    process.env.JWT_SECRET,
+    { expiresIn: '7d' }   // Access Token
+  );
 };
+
+const generateRefreshToken = (id) => {
+  return jwt.sign(
+    { id },
+    process.env.JWT_REFRESH_SECRET,
+    { expiresIn: '30d' }
+  );
+};
+
 
 exports.registerUser = async (req, res) => {
   try {
-    const { email, password, username } = req.body;
+    let { email, password, username } = req.body;
 
     if (!email || !password || !username) {
-      return res.status(400).json({ message: 'Email, password and username are required' });
+      return res.status(400).json({ message: "Email, password and username are required" });
+    }
+
+    email = email.toLowerCase().trim();
+    username = username.toLowerCase().trim();
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
+
+    // Username validation
+    const usernameRegex = /^[a-zA-Z0-9]+([._-]?[a-zA-Z0-9]+)*$/;
+
+    if (!usernameRegex.test(username)) {
+      return res.status(400).json({ message: "Invalid username. Only letters, numbers, ., _, - allowed and no consecutive symbols."  });
+    }
+
+    if (username.length < 3 || username.length > 30) {
+      return res.status(400).json({
+        message: "Username must be between 3 and 30 characters."
+      });
+    }
+
+    // Password validation
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&^#()_\-+=])[A-Za-z\d@$!%*?&^#()_\-+=]{8,}$/;
+
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({
+        message:
+          "Password must be at least 8 characters long and include uppercase, lowercase, number and special character."
+      });
     }
 
     const userExists = await User.findOne({ email });
     if (userExists) {
-      return res.status(400).json({ message: 'Email already exists' });
-    }
+      return res.status(400).json({ message: "Email already exists" });
+      }
 
     const usernameTaken = await User.findOne({ username });
     if (usernameTaken) {
-      return res.status(400).json({ message: 'Username is already taken' });
+      return res.status(400).json({ message: "Username is already taken" });
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -31,88 +76,235 @@ exports.registerUser = async (req, res) => {
       email,
       username,
       password: hashedPassword,
-      authProvider: 'local',
+      authProvider: "local",
       profile: {
-        displayName: email.split('@')[0]
+        displayName: email.split("@")[0]
       }
     });
+
+    const accessToken = generateToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    user.refreshToken = refreshToken;
+    await user.save();
 
     res.status(201).json({
       _id: user.id,
       email: user.email,
       username: user.username,
-      token: generateToken(user._id)
+      accessToken,
+      refreshToken
     });
 
   } catch (error) {
-    console.log("CRASH_LOG:", error);
-    res.status(500).json({ message: 'Internal Server Error', error: error.message });
+    console.error("REGISTER ERROR:", error);
+
+    res.status(500).json({
+      message: "Internal Server Error",
+      error: error.message
+    });
   }
 };
 
 exports.loginUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email }).select('+password');
+    let { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required"});
+    }
+    email = email.toLowerCase().trim();
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
+    const user = await User.findOne({ email }).select("+password");
 
     if (user && user.isDeleted) {
       return res.status(403).json({ message: 'This account has been deleted.' });
+     }
+
+    const isPasswordCorrect = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordCorrect) {
+      return res.status(401).json({message: "Invalid email or password" });
     }
 
-    if (user && (await bcrypt.compare(password, user.password))) {
-      res.json({
-        _id: user.id,
-        username: user.username,
-        email: user.email,
-        token: generateToken(user._id)
-      });
-    } else {
-      res.status(401).json({ message: 'Invalid email or password' });
-    }
+    // Generate tokens
+    const accessToken = generateToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    res.json({
+      _id: user.id,
+      username: user.username,
+      email: user.email,
+      accessToken,
+      refreshToken
+    });
+
   } catch (error) {
-    res.status(500).json({ message: 'Server Error', error: error.message });
+    console.error("LOGIN ERROR:", error);
+
+    res.status(500).json({
+      message: "Server Error",
+      error: error.message
+    });
   }
 };
 
+// exports.oauthSync = async (req, res) => {
+//   try {
+//     const { email, displayName, avatarUrl, provider, providerId } = req.body;
+//     let user = await User.findOne({ email });
+
+//     if (user && user.isDeleted) {
+//       return res.status(403).json({ message: 'This account has been deleted. Please contact support to restore it.' });
+//     }
+
+//     if (user) {
+//       const accessToken = generateToken(user._id);
+//       const refreshToken = generateRefreshToken(user._id);
+
+//      user.refreshToken = refreshToken;
+//      await user.save();
+
+//     return res.json({
+//     _id: user.id,
+//     username: user.username,
+//     email: user.email,
+//     accessToken,
+//     refreshToken
+//      });
+//     }
+
+//     const baseUsername = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '');
+//     const uniqueUsername = `${baseUsername}_${Math.floor(Math.random() * 10000)}`;
+
+//     user = await User.create({
+//       username: uniqueUsername,
+//       email,
+//       authProvider: provider || 'google',
+//       providerId: providerId,
+//       profile: { displayName: displayName || baseUsername, avatarUrl: avatarUrl || "" }
+//     });
+
+//     const accessToken = generateToken(user._id);
+//     const refreshToken = generateRefreshToken(user._id);
+
+//     user.refreshToken = refreshToken;
+//     await user.save();
+
+//     res.status(201).json({
+//     _id: user.id,
+//     username: user.username,
+//     email: user.email,
+//     accessToken,
+//     refreshToken
+//     });
+//   } catch (error) {
+//     res.status(500).json({ message: 'OAuth Sync Error', error: error.message });
+//   }
+// };
+
+
 exports.oauthSync = async (req, res) => {
   try {
-    const { email, displayName, avatarUrl, provider, providerId } = req.body;
+    let { email, displayName, avatarUrl, provider, providerId } = req.body;
+
+    if (!email || !provider) {
+      return res.status(400).json({ message: "Email and provider are required." });
+}
+
+    email = email.toLowerCase().trim();
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Invalid email format." });
+    }
+
+    const allowedProviders = ["google", "github"];
+
+    if (!allowedProviders.includes(provider)) {
+      return res.status(400).json({ message: "Invalid authentication provider." });
+    }
+
     let user = await User.findOne({ email });
 
-    if (user && user.isDeleted) {
-      return res.status(403).json({ message: 'This account has been deleted. Please contact support to restore it.' });
+    if (user?.isDeleted) {
+      return res.status(403).json({ message: "This account has been deleted. Please contact support to restore it."  });
     }
 
     if (user) {
+      const accessToken = generateToken(user._id);
+      const refreshToken = generateRefreshToken(user._id);
+
+      user.refreshToken = refreshToken;
+      await user.save();
+
       return res.json({
         _id: user.id,
         username: user.username,
         email: user.email,
-        token: generateToken(user._id)
+        accessToken,
+        refreshToken
       });
     }
 
-    const baseUsername = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '');
-    const uniqueUsername = `${baseUsername}_${Math.floor(Math.random() * 10000)}`;
+    // Generate unique username
+    const baseUsername = email
+      .split("@")[0]
+      .replace(/[^a-zA-Z0-9_]/g, "")
+      .toLowerCase();
 
+    let uniqueUsername = baseUsername;
+    let counter = 1;
+
+    while (await User.findOne({ username: uniqueUsername })) {
+      uniqueUsername = `${baseUsername}${counter++}`;
+    }
+
+    // Create user
     user = await User.create({
       username: uniqueUsername,
       email,
-      authProvider: provider || 'google',
-      providerId: providerId,
-      profile: { displayName: displayName || baseUsername, avatarUrl: avatarUrl || "" }
+      authProvider: provider,
+      providerId: providerId || null,
+      profile: {
+        displayName: displayName?.trim() || baseUsername,
+        avatarUrl: avatarUrl || ""
+      }
     });
+
+    const accessToken = generateToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    user.refreshToken = refreshToken;
+    await user.save();
 
     res.status(201).json({
       _id: user.id,
       username: user.username,
       email: user.email,
-      token: generateToken(user._id)
+      accessToken,
+      refreshToken
     });
+
   } catch (error) {
-    res.status(500).json({ message: 'OAuth Sync Error', error: error.message });
+    console.error("OAUTH SYNC ERROR:", error);
+
+    res.status(500).json({
+      message: "OAuth Sync Error",
+      error: error.message
+    });
   }
 };
+
 
 exports.setUsername = async (req, res) => {
   try {
@@ -125,6 +317,14 @@ exports.setUsername = async (req, res) => {
     username = username.toLowerCase().trim();
 
     const usernameRegex = /^[a-zA-Z0-9]+([._-]?[a-zA-Z0-9]+)*$/;
+
+     if (!username) {
+      return res.status(400).json({ message: "Username cannot be empty" });
+    }
+
+    if (username.length < 3 || username.length > 30) {
+      return res.status(400).json({ message: "Username must be between 3 and 30 characters." });
+    }
 
     if (!usernameRegex.test(username)) {
       return res.status(400).json({
@@ -173,9 +373,19 @@ exports.setUsername = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
     res.json(user);
+
   } catch (error) {
-    res.status(500).json({ message: 'Server Error' });
+    console.error("GET ME ERROR:", error);
+
+    res.status(500).json({ message: "Server Error",
+    error: error.message
+    });
   }
 };
 
@@ -229,24 +439,35 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
-exports.updateAvatar = async (req, res) => {
-  console.log("update avatar called");
 
+exports.updateAvatar = async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ message: "Please upload an image" });
+      return res.status(400).json({ message: "Please upload an image." });
     }
 
     const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Delete old avatar from Cloudinary (important)
-    if (user.profile.avatarPublicId) {
-      const cloudinary = require("cloudinary").v2;
-      await cloudinary.uploader.destroy(user.profile.avatarPublicId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found."  });
     }
 
-    // Save new avatar
+    const cloudinary = require("cloudinary").v2;
+
+    // Delete previous avatar (if exists)
+    if (user.profile.avatarPublicId) {
+      try {
+        await cloudinary.uploader.destroy(user.profile.avatarPublicId);
+      } catch (err) {
+        console.error("Cloudinary delete failed:", err);
+      }
+    }
+
+    // Validate upload response
+    if (!req.file.path || !req.file.filename) {
+      return res.status(500).json({  message: "Image upload failed." });
+    }
+
     user.profile.avatarUrl = req.file.path;
     user.profile.avatarPublicId = req.file.filename;
 
@@ -254,38 +475,75 @@ exports.updateAvatar = async (req, res) => {
 
     res.json({
       message: "Avatar updated successfully",
-      avatarUrl: req.file.path,
-      publicId: req.file.filename,
+      avatarUrl: user.profile.avatarUrl,
+      publicId: user.profile.avatarPublicId
     });
+
   } catch (error) {
+    console.error("UPDATE AVATAR ERROR:", error);
+
     res.status(500).json({
       message: "Avatar Update Error",
-      error: error.message,
+      error: error.message
     });
   }
 };
 
 exports.updatePassword = async (req, res) => {
   try {
-    const { oldPassword, newPassword } = req.body;
-    const user = await User.findById(req.user.id).select('+password');
+    let { oldPassword, newPassword } = req.body;
 
-    if (user.authProvider !== 'local') {
-      return res.status(400).json({ message: 'Cannot change password for accounts created via social login.' });
+
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ message: "Old password and new password are required." });
+    }
+
+    if (oldPassword === newPassword) {
+      return res.status(400).json({ message: "New password must be different from the old password."  });
+    }
+
+    const user = await User.findById(req.user.id).select("+password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found."  });
+    }
+
+    if (user.authProvider !== "local") {
+      return res.status(400).json({ message: "Cannot change password for accounts created via social login."  });
     }
 
     const isMatch = await bcrypt.compare(oldPassword, user.password);
+
     if (!isMatch) {
-      return res.status(401).json({ message: 'Incorrect old password.' });
+      return res.status(401).json({ message: "Incorrect old password." });
+    }
+
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&^#()_\-+=])[A-Za-z\d@$!%*?&^#()_\-+=]{8,}$/;
+
+    if (!passwordRegex.test(newPassword)) {
+      return res.status(400).json({
+        message:
+          "Password must be at least 8 characters long and include uppercase, lowercase, number and special character."
+      });
     }
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
+
     await user.save();
 
-    res.json({ message: 'Password updated successfully.' });
+    res.json({
+      message: "Password updated successfully."
+    });
+
   } catch (error) {
-    res.status(500).json({ message: 'Password Update Error', error: error.message });
+    console.error("UPDATE PASSWORD ERROR:", error);
+
+    res.status(500).json({
+      message: "Password Update Error",
+      error: error.message
+    });
   }
 };
 
@@ -293,14 +551,32 @@ exports.deleteAccount = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
 
+    if (!user) {
+      return res.status(404).json({  message: "User not found."  });
+    }
+
+    if (user.isDeleted) {
+      return res.status(400).json({ message: "Account is already deleted." });
+    }
+
     user.isDeleted = true;
     user.deletedAt = new Date();
     user.isPublished = false;
 
+    // Invalidate refresh token
+    user.refreshToken = null;
+
     await user.save();
-    res.json({ message: 'Account deleted successfully.' });
+
+    res.json({
+      message: "Account deleted successfully."
+    });
+
   } catch (error) {
-    res.status(500).json({ message: 'Account Delete Error' });
+    res.status(500).json({
+      message: "Account Delete Error",
+      error: error.message
+    });
   }
 };
 
@@ -320,67 +596,100 @@ exports.checkUsernameAvailability = async (req, res) => {
 };
 
 exports.addSocials = async (req, res) => {
-  console.log("social called");
-
   try {
-    if (!req.user || !req.user.id) {
-      return res.status(401).json({ message: 'Not authorized, user missing' });
+    if (!req.user?.id) {
+      return res.status(401).json({
+        message: "Not authorized, user missing"
+      });
     }
 
     const user = await User.findById(req.user.id);
+
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({
+        message: "User not found"
+      });
     }
 
-    if (!req.body || typeof req.body !== 'object') {
-      return res.status(400).json({ message: 'Invalid data format for socials' });
+    if (!req.body || typeof req.body !== "object") {
+      return res.status(400).json({
+        message: "Invalid data format for socials"
+      });
     }
 
-    // 🔥 Normalize function (remove trailing slash & trim)
-    const normalizeLink = (url) => url.trim().replace(/\/+$/, '');
+    const allowedPlatforms = [
+      "github",
+      "linkedin",
+      "twitter",
+      "instagram",
+      "facebook",
+      "youtube",
+      "spotify",
+      "website",
+      "discord",
+      "telegram"
+    ];
 
-    // 🔥 Existing links (normalized)
-    const existingLinks = Array.from(user.socials.values()).map(normalizeLink);
+    const normalizeLink = (url) =>
+      url.trim().replace(/\/+$/, "");
+
+    const existingLinks = Array.from(user.socials.values())
+      .map(normalizeLink);
 
     for (const [platform, link] of Object.entries(req.body)) {
-      if (!link || typeof link !== 'string') {
+
+      // Platform validation
+      if (!allowedPlatforms.includes(platform)) {
         return res.status(400).json({
-          message: `Invalid link for platform: ${platform}`
+          message: `Unsupported platform: ${platform}`
+        });
+      }
+
+      // Link validation
+      if (!link || typeof link !== "string") {
+        return res.status(400).json({
+          message: `Invalid link for ${platform}`
         });
       }
 
       const cleanLink = normalizeLink(link);
 
-      // ❌ Duplicate link check
+      // URL validation
+      try {
+        new URL(cleanLink);
+      } catch {
+        return res.status(400).json({
+          message: `Invalid URL for ${platform}`
+        });
+      }
+
+      // Duplicate link
       if (existingLinks.includes(cleanLink)) {
         return res.status(400).json({
           message: `This link is already added: ${link}`
         });
       }
 
-      // ✅ Add / overwrite platform
       user.socials.set(platform, cleanLink);
-
-      // 🔁 Update array to prevent duplicates in same request
       existingLinks.push(cleanLink);
     }
 
     await user.save();
 
     res.json({
-      message: 'Socials updated successfully',
+      message: "Socials updated successfully",
       socials: Object.fromEntries(user.socials)
     });
 
   } catch (error) {
-    console.error(error);
+    console.error("ADD SOCIALS ERROR:", error);
+
     res.status(500).json({
-      message: 'Error updating socials',
+      message: "Error updating socials",
       error: error.message
     });
   }
 };
-
 exports.getSocials = async (req, res) => {
   console.log("social called");
   try {
@@ -396,5 +705,80 @@ exports.getSocials = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Error fetching socials', error: error.message });
+  }
+};
+
+exports.refreshToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(401).json({
+        message: "Refresh token required"
+      });
+    }
+
+    const decoded = jwt.verify(
+      refreshToken,
+      process.env.JWT_REFRESH_SECRET
+    );
+
+    const user = await User.findById(decoded.id);
+
+    if (!user) {
+      return res.status(401).json({
+        message: "User not found"
+      });
+    }
+
+    if (user.refreshToken !== refreshToken) {
+      return res.status(401).json({
+        message: "Invalid refresh token"
+      });
+    }
+
+    const newAccessToken = generateToken(user._id);
+    const newRefreshToken = generateRefreshToken(user._id);
+
+    user.refreshToken = newRefreshToken;
+    await user.save();
+
+    res.json({
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken
+    });
+
+  } catch (error) {
+    res.status(401).json({
+      message: "Invalid or expired refresh token"
+    });
+  }
+};
+
+exports.logout = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.json({
+        message: "Logged out"
+      });
+    }
+
+    const user = await User.findOne({ refreshToken });
+
+    if (user) {
+      user.refreshToken = null;
+      await user.save();
+    }
+
+    res.json({
+      message: "Logged out successfully"
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: "Logout failed"
+    });
   }
 };
