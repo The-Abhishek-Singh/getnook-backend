@@ -18,6 +18,22 @@ exports.createBlock = async (req, res) => {
     if (!position || !position.i)
       return res.status(400).json({ message: "Position is required" });
 
+     const allowedTypes = [
+      "link",
+      "social",
+      "text",
+      "image",
+      "video",
+      "music",
+      "qr",
+    ];
+
+    if (!allowedTypes.includes(type)) {
+      return res.status(400).json({ success: false, message: "Invalid block type", });}
+
+    if (typeof position !== "number") {
+      return res.status(400).json({ success: false, message: "Position values must be numbers"  });}
+
     let finalContent = content || {};
 
     // Extract URL safely
@@ -88,6 +104,20 @@ exports.updateBlock = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+     return res.status(400).json({ success: false, message: "Invalid block ID"});}
+
+    if (!updates || Object.keys(updates).length === 0) {
+    return res.status(400).json({ success: false, message: "Request body cannot be empty", });}
+
+    if (updates.content?.url) {
+      try {
+        new URL(ensureProtocol(updates.content.url.trim()));
+      } catch {
+        return res.status(400).json({ success: false, message: "Invalid URL"  });
+      }
+    }
 
     console.log(`Updating block ${id} with:`, JSON.stringify(updates, null, 2));
 
@@ -192,6 +222,9 @@ exports.updateBlockSize = async (req, res) => {
     const { id } = req.params;
     const { width } = req.body;
 
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+     return res.status(400).json({ success: false, message: "Invalid block ID"});}
+
     console.log(`📐 Updating block ${id} size to: ${width}`);
 
     if (!width) {
@@ -255,6 +288,9 @@ exports.updateBlockSize = async (req, res) => {
 exports.getUserBlocks = async (req, res) => {
   try {
     const username = req.params.username;
+
+    if (!username?.trim()) {
+      return res.status(400).json({ success: false, message: "Username is required"});}
 
     const user = await User.findOne(
       { username, isDeleted: false, isPublished: true },
@@ -355,9 +391,15 @@ exports.debugRawBlocks = async (req, res) => {
 
 exports.getBlockById = async (req, res) => {
   try {
+    const { id } = req.params;
+
+    // Validate block id
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid block ID"})}
+
     const block = await Block.findOne({
-      _id: req.params.id,
-      userId: req.user.id
+      _id: id,
+      userId: req.user.id,
     });
 
     if (!block) return res.status(404).json({ message: 'Block not found' });
@@ -445,9 +487,14 @@ exports.updateBlockPositions = async (req, res) => {
 
 exports.toggleBlockActive = async (req, res) => {
   try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ success: false, message: "Invalid block ID",})}
+
     const block = await Block.findOne({
-      _id: req.params.id,
-      userId: req.user.id
+      _id: id,
+      userId: req.user.id,
     });
 
     if (!block) return res.status(404).json({ message: 'Block not found' });
@@ -464,9 +511,14 @@ exports.toggleBlockActive = async (req, res) => {
 
 exports.duplicateBlock = async (req, res) => {
   try {
+     const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false,message: "Invalid block ID"});}
+
     const block = await Block.findOne({
-      _id: req.params.id,
-      userId: req.user.id
+      _id: id,
+      userId: req.user.id,
     });
 
     if (!block) return res.status(404).json({ message: 'Block not found' });
@@ -481,7 +533,10 @@ exports.duplicateBlock = async (req, res) => {
 
     const createdBlock = await Block.create(newBlock);
 
-    res.json(createdBlock);
+     return res.status(201).json({ success: true, message: "Block duplicated successfully",
+      block: createdBlock,
+    });
+
   } catch (error) {
     console.error("Error duplicating block:", error);
     res.status(500).json({ message: 'Error duplicating block', error: error.message });
@@ -490,10 +545,17 @@ exports.duplicateBlock = async (req, res) => {
 
 exports.deleteBlock = async (req, res) => {
   try {
+     const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "Invalid block ID"});
+    }
+
     const block = await Block.findOneAndDelete({
-      _id: req.params.id,
-      userId: req.user.id
+      _id: id,
+      userId: req.user.id,
     });
+
 
     if (!block) {
       return res.status(404).json({ message: 'Block not found or unauthorized' });

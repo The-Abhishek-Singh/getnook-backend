@@ -14,6 +14,11 @@ class AnalyticsService {
 
         // Total profile views
         const totalProfileViews = await Visit.countDocuments({ userId: uid });
+        const totalViews = await Visit.countDocuments({ userId });
+        const qrViews = await Visit.countDocuments({ userId, source: "qr" });
+        const directViews = await Visit.countDocuments({ userId, source: "direct"});
+        const socialViews = await Visit.countDocuments({ userId,source: "social" });
+        const linkViews = await Visit.countDocuments({ userId, source: "link" });
 
         // Device stats
         const deviceStats = await Visit.aggregate([
@@ -52,7 +57,12 @@ class AnalyticsService {
             deviceStats,
             referrerStats,
             dailyStats,
-            blockStats
+            blockStats,
+            totalViews,
+            qrViews,
+            directViews,
+            socialViews,
+            linkViews
         };
     }
 }

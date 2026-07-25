@@ -65,13 +65,41 @@ const blockSchema = new mongoose.Schema({
   },
 
   style: {
-    width: { type: String, default: '1x1', enum: ['1x1', '2x1', '1x2', '2x2', 'full'] }, // ✅ ADD THIS
-    backgroundColor: String,
-    textColor: String,
-    borderRadius: String,
-    fontSize: String,
-    isHighlighted: { type: Boolean, default: false }
+  width: {
+    type: String,
+    default: '1x1',
+    enum: ['1x1', '2x1', '1x2', '2x2', 'full']
   },
+
+  // ✅ NEW
+  aspectRatio: {
+    type: String,
+    default: 'auto',
+    enum: [
+      'auto',
+      '1:1',
+      '3:4',
+      '4:3',
+      '2:3',
+      '3:2',
+      '9:16',
+      '16:9',
+      '5:4',
+      '4:5',
+      '21:9'
+    ]
+  },
+
+  backgroundColor: String,
+  textColor: String,
+  borderRadius: String,
+  fontSize: String,
+
+  isHighlighted: {
+    type: Boolean,
+    default: false
+  }
+},
 
   isActive: { type: Boolean, default: true, index: true },
   isDraft: { type: Boolean, default: false },

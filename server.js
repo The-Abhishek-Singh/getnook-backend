@@ -18,13 +18,15 @@ const seoRoutes = require('./routes/seoRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const linkRoutes = require("./routes/linkRoutes");
+const qrRoutes = require("./routes/qrRoutes")
 
-app.use('/api/auth', authRoutes);
-app.use('/api/blocks', blockRoutes);
+app.use('/api/auth', authRoutes);// refresh token added , validation added
+app.use('/api/blocks', blockRoutes);// validation added/checked , aspect ratio added
 app.use('/api/seo', seoRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use("/api/links", linkRoutes);
-app.use('./api/analytics', analyticsRoutes);
+app.use('./api/analytics', analyticsRoutes);// updated analytics
+app.use('/api/qr', qrRoutes) //new feature added
 
 app.get("/", (req, res) => {
   res.send("Bento Clone Backend is Running! 🚀");

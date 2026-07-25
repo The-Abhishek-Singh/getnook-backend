@@ -122,7 +122,11 @@ exports.loginUser = async (req, res) => {
     }
     const user = await User.findOne({ email }).select("+password");
 
-    if (user && user.isDeleted) {
+    if (!user) {
+    return res.status(401).json({ message:"Invalid email or password"});
+    }
+
+    if (user.isDeleted) {
       return res.status(403).json({ message: 'This account has been deleted.' });
      }
 
