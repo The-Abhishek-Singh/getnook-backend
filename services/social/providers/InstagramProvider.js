@@ -1,0 +1,172 @@
+const BaseProvider = require("./BaseProvider");
+const { createPage } = require("../utils/browser");
+const { parseMeta } = require("../utils/instagramParser");
+
+class InstagramProvider extends BaseProvider {
+
+    extractUsername(url) {
+        const match = url.match(/instagram\.com\/([^/?#]+)/i);
+
+        if (!match) {
+            throw new Error("Invalid Instagram URL");
+        }
+
+        return match[1];
+    }
+
+    async fetch(url) {
+        const username = this.extractUsername(url);
+        const { page, context } = await createPage();
+
+const graphQLPromise = page.waitForResponse(
+    async (response) => {
+        try {
+            const responseUrl = response.url();
+            const contentType =
+                response.headers()["content-type"] || "";
+
+            if (
+                response.status() !== 200 ||
+                !contentType.includes("application/json")
+            ) {
+                return false;
+            }
+
+            if (
+                !responseUrl.includes("/graphql") &&
+                !responseUrl.includes("/api/")
+            ) {
+                return false;
+            }
+
+            const json = await response.json();
+
+            return !!json?.data?.user?.edge_owner_to_timeline_media?.edges;
+
+        } catch {
+            return false;
+        }
+    },
+    {
+        timeout: 10000,
+    }
+);
+
+try {
+
+    await page.goto(
+        `https://www.instagram.com/${username}/`,
+        {
+            waitUntil: "domcontentloaded",
+            timeout: 30000,
+        }
+    );
+
+    let graphResponse = null;
+
+    try {
+        const response = await graphQLPromise;
+        graphResponse = await response.json();
+    } catch (err) {
+        console.warn(
+    `⚠️ Failed to fetch Instagram timeline for @${username}: ${err.message}`
+);
+    }
+
+    const profile = await this.fetchProfile(page, url);
+
+    const items = await this.fetchContent(graphResponse);
+
+    return this.normalize(profile, items);
+
+   } finally {
+    await context.close();
+   }
+}
+
+    async fetchProfile(page, url) {
+        const username = this.extractUsername(url);
+
+        const meta = await parseMeta(page);
+
+        console.log("📦 Instagram Items:");
+        console.dir(meta, { depth: null });
+
+        return {
+            id: "",
+            username,
+            displayName: meta.displayName,
+            avatar: meta.avatar,
+            bio: meta.description,
+            followers: meta.followers,
+            following: meta.following,
+            verified: false,
+            posts: meta.posts,
+        };
+    }
+
+    async fetchContent(graphResponse) {
+
+        if (
+            !graphResponse?.data?.user?.edge_owner_to_timeline_media?.edges
+        ) {
+            console.log("❌ No Instagram posts found");
+            return [];
+        }
+
+        const edges =
+            graphResponse.data.user.edge_owner_to_timeline_media.edges;
+
+        console.log(`✅ Found ${edges.length} Instagram posts`);
+
+        const items = edges.map(({ node }) => {
+        const originalImage =
+        node.display_url ||
+        node.thumbnail_src ||
+        "";
+
+    return {
+        // id: node.id,
+
+        shortcode: node.shortcode,
+
+        url: `https://www.instagram.com/p/${node.shortcode}/`,
+
+        thumbnail: `${process.env.API_URL}/api/social/image?url=${encodeURIComponent(originalImage)}`,
+
+        // caption:
+        //     node.edge_media_to_caption?.edges?.[0]?.node?.text || "",
+
+        // likes:
+        //     node.edge_liked_by?.count ??
+        //     node.edge_media_preview_like?.count ??
+        //     0,
+
+        // comments:
+        //     node.edge_media_to_comment?.count ?? 0,
+
+        timestamp: new Date(node.taken_at_timestamp * 1000),
+
+        // type: node.__typename,
+
+        // isVideo: node.is_video,
+    };
+});
+
+        console.log("📦 Instagram Items:");
+        console.dir(items, { depth: null });
+
+        return items;
+    }
+
+    normalize(profile, items) {
+        return {
+            platform: "instagram",
+            fetchedAt: new Date(),
+            profile,
+            items,
+        };
+    }
+}
+
+module.exports = new InstagramProvider();

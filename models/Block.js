@@ -37,58 +37,63 @@ const blockSchema = new mongoose.Schema({
 
   // ✅ FIXED CONTENT
   content: {
-    title: String,
-    description: String,
+  title: String,
+  description: String,
 
-    // link/social
-    url: String,
-    logo: String, // ✅ IMPORTANT FIX
+  url: String,
+  logo: String,
 
-    // image
-    imageUrl: String,
-    imagePublicId: String,
+  imageUrl: String,
+  imagePublicId: String,
 
-    // video
-    videoUrl: String,
-    videoPublicId: String,
+  videoUrl: String,
+  videoPublicId: String,
 
-    // embed
-    embedCode: String,
+  embedCode: String,
 
-    // integrations
-    githubUsername: String,
-    youtubeChannelId: String,
+  githubUsername: String,
+  youtubeChannelId: String,
 
-    // cache
-    cachedData: mongoose.Schema.Types.Mixed,
-    lastFetchedAt: Date
+  platform: {
+      type: String,
+      default: null
   },
+
+  fetchStatus: {
+      type: String,
+      enum: ["pending", "fetching", "completed", "failed"],
+      default: null
+  },
+
+  cachedData: mongoose.Schema.Types.Mixed,
+
+  lastFetchedAt: Date
+},
 
   style: {
   width: {
     type: String,
     default: '1x1',
-    enum: ['1x1', '2x1', '1x2', '2x2', 'full']
+    enum: [
+      "1x1",
+      "2x1",
+      "1x2",
+      "2x2",
+      "full",
+      "1:1",
+      "3:4",
+      "4:3",
+      "2:3",
+      "3:2",
+      "9:16",
+      "16:9",
+      "5:4",
+      "4:5",
+      "21:9"
+      ]
   },
 
-  // ✅ NEW
-  aspectRatio: {
-    type: String,
-    default: 'auto',
-    enum: [
-      'auto',
-      '1:1',
-      '3:4',
-      '4:3',
-      '2:3',
-      '3:2',
-      '9:16',
-      '16:9',
-      '5:4',
-      '4:5',
-      '21:9'
-    ]
-  },
+
 
   backgroundColor: String,
   textColor: String,

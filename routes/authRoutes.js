@@ -16,7 +16,8 @@ const {
   addSocials,
   getUsername,
   refreshToken,
-  logout
+  logout,
+  changeUsername
 } = require('../controllers/authController');
 
 const { protect } = require('../middleware/authMiddleware');
@@ -31,6 +32,8 @@ router.post("/logout", logout);
 router.put('/set-username', protect, setUsername);
 router.get('/check-username/:username', checkUsernameAvailability);
 router.get('/get-my-username', protect, getUsername);
+router.put('/change-username' , protect , changeUsername);
+
 router.get('/me', protect, getMe);
 router.get('/', protect, getSocials);
 router.put('/update-profile', protect, updateProfile);

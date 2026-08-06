@@ -15,7 +15,6 @@ class AnalyticsService {
         // Total profile views
         const totalProfileViews = await Visit.countDocuments({ userId: uid });
         const totalViews = await Visit.countDocuments({ userId });
-        const qrViews = await Visit.countDocuments({ userId, source: "qr" });
         const directViews = await Visit.countDocuments({ userId, source: "direct"});
         const socialViews = await Visit.countDocuments({ userId,source: "social" });
         const linkViews = await Visit.countDocuments({ userId, source: "link" });
@@ -59,7 +58,6 @@ class AnalyticsService {
             dailyStats,
             blockStats,
             totalViews,
-            qrViews,
             directViews,
             socialViews,
             linkViews

@@ -17,6 +17,28 @@ const storage = new CloudinaryStorage({
   },
 });
 
+// const storage = new CloudinaryStorage({
+//   cloudinary : cloudinary,
+//   params: {
+//     folder: "GetNook",
+//     allowed_formats: ["jpg", "png", "jpeg", "webp"]
+//   }
+// });
+
+const storage = multer.memoryStorage();
+
+const upload = multer({
+    storage,
+    limits: {
+        fileSize: 5 * 1024 * 1024
+    }
+});
+
 const upload = multer({ storage: storage });
 
-module.exports = upload;
+// module.exports = upload;
+
+module.exports = {
+    upload,
+    cloudinary
+};

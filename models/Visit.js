@@ -5,7 +5,7 @@ const visitSchema = new mongoose.Schema({
   visitorId: { type: String },
   deviceType: { type: String, enum: ['mobile', 'desktop', 'tablet', 'unknown'], default: 'unknown' },
   referrer: { type: String, default: 'direct' },
-  source: { type: String, enum:['direct', 'qr', 'social', 'link'], default: 'direct' , index:true},
+  source: { type: String, enum:['direct', 'social', 'link'], default: 'direct' , index:true},
   blockId: { type: mongoose.Schema.Types.ObjectId, ref: 'Block' },
   visitedAt: { type: Date, default: Date.now }
 });

@@ -3,6 +3,9 @@ const User = require('../models/User');
 const Visit = require('../models/Visit');
 const useragent = require('useragent');
 const axios = require("axios");
+const mongoose = require("mongoose");
+const { enqueueSocialFetch } = require("../services/social/socialService");
+const detectPlatform = require('../services/social/utils/detectPlatform')
 
 const ensureProtocol = (url) => {
   if (!url) return url;
@@ -19,19 +22,24 @@ exports.createBlock = async (req, res) => {
       return res.status(400).json({ message: "Position is required" });
 
      const allowedTypes = [
-      "link",
-      "social",
-      "text",
-      "image",
-      "video",
-      "music",
-      "qr",
-    ];
+                'link',
+                'image',
+                'video',
+                'heading',
+                'quote',
+                'text',
+                'social',
+                'map',
+                'spotify',
+                'github',
+                'youtube'
+            ]
 
     if (!allowedTypes.includes(type)) {
       return res.status(400).json({ success: false, message: "Invalid block type", });}
 
-    if (typeof position !== "number") {
+    if (typeof position.x !== "number" || typeof position.y !== "number" || typeof position.w !== "number" ||
+       typeof position.h !== "number") {
       return res.status(400).json({ success: false, message: "Position values must be numbers"  });}
 
     let finalContent = content || {};
@@ -40,34 +48,42 @@ exports.createBlock = async (req, res) => {
     const rawUrl = content?.url || content?.handle || content?.text;
 
     if ((type === "link" || type === "social") && rawUrl) {
-      const sanitizedUrl = ensureProtocol(
-        rawUrl.trim().replace(/\\$/, "")
-      );
+  const sanitizedUrl = ensureProtocol(
+    rawUrl.trim().replace(/\\$/, "")
+  );
 
-      try {
-        const microlinkRes = await axios.get(
-          `https://api.microlink.io/?url=${encodeURIComponent(sanitizedUrl)}`
-        );
+  const platform = detectPlatform(sanitizedUrl);
 
-        const data = microlinkRes.data.data;
+  try {
+    const microlinkRes = await axios.get(
+      `https://api.microlink.io/?url=${encodeURIComponent(sanitizedUrl)}`
+    );
 
-        finalContent = {
-          url: sanitizedUrl,
-          title: data?.title || new URL(sanitizedUrl).hostname,
-          logo: data?.logo?.url || `https://logo.clearbit.com/${new URL(sanitizedUrl).hostname}`,
-        };
+    const data = microlinkRes.data.data;
 
-      } catch (err) {
-        // fallback
-        finalContent = {
-          url: sanitizedUrl,
-          title: new URL(sanitizedUrl).hostname,
-          logo: `https://logo.clearbit.com/${new URL(sanitizedUrl).hostname}`,
-        };
-      }
-    }
+    finalContent = {
+      url: sanitizedUrl,
+      title: data?.title || new URL(sanitizedUrl).hostname,
+      logo: data?.logo?.url || `https://www.google.com/s2/favicons?sz=128&domain=${new URL(sanitizedUrl).hostname}`,
+      platform,
+    };
+
+  } catch (err) {
+    // fallback
+    finalContent = {
+      url: sanitizedUrl,
+      title: new URL(sanitizedUrl).hostname,
+      logo: `https://www.google.com/s2/favicons?sz=128&domain=${new URL(sanitizedUrl).hostname}`,
+      platform,
+    };
+  }
+}
 
     const blockCount = await Block.countDocuments({ userId: req.user.id });
+    if (type === "social") {
+    finalContent.fetchStatus = "fetching";
+    finalContent.cachedData = null;
+     } 
 
     const newBlock = await Block.create({
       userId: req.user.id,
@@ -79,10 +95,15 @@ exports.createBlock = async (req, res) => {
         w: position.w || 2,
         h: position.h || 1,
       },
+      fetchStatus: "fetching",
       content: finalContent,
       style: style || {},
       order: blockCount,
     });
+    
+    if (newBlock.type === "social") {
+    await enqueueSocialFetch(newBlock);
+    }
 
     return res.status(201).json({
       success: true,
@@ -137,12 +158,23 @@ exports.updateBlock = async (req, res) => {
       if (updates.style.width) {
         const width = updates.style.width;
         const sizeMap = {
-          '1x1': { w: 1, h: 1 },
-          '2x1': { w: 2, h: 1 },
-          '1x2': { w: 1, h: 2 },
-          '2x2': { w: 2, h: 2 },
-          'full': { w: 2, h: 1 }
-        };
+               '1x1': { w: 1, h: 1 },
+               '2x1': { w: 2, h: 1 },
+               '1x2': { w: 1, h: 2 },
+               '2x2': { w: 2, h: 2 },
+               'full': { w: 4, h: 2 },
+
+               '1:1': { w: 1, h: 1 },
+               '3:4': { w: 1, h: 2 },
+               '4:3': { w: 2, h: 1 },
+               '2:3': { w: 1, h: 2 },
+               '3:2': { w: 2, h: 1 },
+               '9:16': { w: 1, h: 2 },
+               '16:9': { w: 2, h: 1 },
+               '5:4': { w: 2, h: 2 },
+               '4:5': { w: 1, h: 2 },
+               '21:9': { w: 4, h: 2 }
+              };
 
         const dimensions = sizeMap[width];
         if (dimensions) {
@@ -186,10 +218,13 @@ exports.updateBlock = async (req, res) => {
       id,
       { $set: updateFields },
       {
-        new: true,
+        returnDocument: 'after',
         runValidators: true
       }
     );
+    if ( updatedBlock.type === "social" && updates.content?.url) {
+    await enqueueSocialFetch(updatedBlock);
+    }
 
     if (!updatedBlock) {
       return res.status(404).json({ message: "Block not found" });
@@ -232,13 +267,23 @@ exports.updateBlockSize = async (req, res) => {
     }
 
     // Map width to grid dimensions
-    const sizeMap = {
-      '1x1': { w: 1, h: 1 },
-      '2x1': { w: 2, h: 1 },
-      '1x2': { w: 1, h: 2 },
-      '2x2': { w: 2, h: 2 },
-      'full': { w: 2, h: 1 }
-    };
+   const sizeMap = {
+  '1x1': { w: 1, h: 1 },
+  '2x1': { w: 2, h: 1 },
+  '1x2': { w: 1, h: 2 },
+  '2x2': { w: 2, h: 2 },
+  'full': { w: 4, h: 2 },
+  '1:1': { w: 1, h: 1 },
+  '3:4': { w: 1, h: 2 },
+  '4:3': { w: 2, h: 1 },
+  '2:3': { w: 1, h: 2 },
+  '3:2': { w: 2, h: 1 },
+  '9:16': { w: 1, h: 2 },
+  '16:9': { w: 2, h: 1 },
+  '5:4': { w: 2, h: 2 },
+  '4:5': { w: 1, h: 2 },
+  '21:9': { w: 4, h: 2 }
+};
 
     const dimensions = sizeMap[width];
     if (!dimensions) {
@@ -256,7 +301,7 @@ exports.updateBlockSize = async (req, res) => {
         }
       },
       {
-        new: true,
+        returnDocument: 'after',
         runValidators: true
       }
     );

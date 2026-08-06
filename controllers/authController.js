@@ -1,6 +1,9 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require("google-auth-library");
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const generateToken = (id) => {
   return jwt.sign(
@@ -218,25 +221,30 @@ exports.loginUser = async (req, res) => {
 
 exports.oauthSync = async (req, res) => {
   try {
-    let { email, displayName, avatarUrl, provider, providerId } = req.body;
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({
+        message: "Google credential is required."
+      });
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+
+    const email = payload.email.toLowerCase().trim();
+    const displayName = payload.name;
+    const avatarUrl = payload.picture;
+    const provider = "google";
+    const providerId = payload.sub;
 
     if (!email || !provider) {
       return res.status(400).json({ message: "Email and provider are required." });
 }
-
-    email = email.toLowerCase().trim();
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ message: "Invalid email format." });
-    }
-
-    const allowedProviders = ["google", "github"];
-
-    if (!allowedProviders.includes(provider)) {
-      return res.status(400).json({ message: "Invalid authentication provider." });
-    }
 
     let user = await User.findOne({ email });
 
@@ -694,6 +702,7 @@ exports.addSocials = async (req, res) => {
     });
   }
 };
+
 exports.getSocials = async (req, res) => {
   console.log("social called");
   try {
@@ -783,6 +792,67 @@ exports.logout = async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Logout failed"
+    });
+  }
+};
+
+exports.changeUsername = async (req, res) => {
+  try {
+    let { username } = req.body;
+
+    if (!username) {
+      return res.status(400).json({ message: "Username is required" });
+    }
+
+    username = username.toLowerCase().trim();
+
+    if (!username) {
+      return res.status(400).json({ message: "Username cannot be empty" });
+    }
+
+    if (username.length < 3 || username.length > 30) {
+      return res.status(400).json({ message: "Username must be between 3 and 30 characters." });
+    }
+
+    const usernameRegex = /^[a-zA-Z0-9]+([._-]?[a-zA-Z0-9]+)*$/;
+
+    if (!usernameRegex.test(username)) {
+      return res.status(400).json({
+        message:
+          "Invalid username. Only letters, numbers, ., _, - allowed and no consecutive symbols"
+      });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Check if the new username is the same as the current one
+    if (user.username === username) {
+      return res.status(400).json({ message: "New username must be different from current username." });
+    }
+
+    // Check if the username is already taken by another user
+    const existing = await User.findOne({ username });
+    if (existing) {
+      return res.status(400).json({ message: "Username already taken" });
+    }
+
+    user.username = username;
+    await user.save();
+
+    res.json({
+      message: "Username changed successfully",
+      username: user.username
+    });
+
+  } catch (error) {
+    console.error("CHANGE USERNAME ERROR:", error);
+
+    res.status(500).json({
+      message: "Error changing username",
+      error: error.message
     });
   }
 };
