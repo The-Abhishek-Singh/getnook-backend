@@ -10,7 +10,16 @@ require("./startup/workers");
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    "https://www.getnook.me",
+    "https://getnook.me",
+    "http://localhost:3000"
+  ],
+  credentials: true,
+}));
+
+
 app.use(express.json());
 
 const authRoutes = require('./routes/authRoutes');
