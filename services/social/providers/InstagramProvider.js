@@ -14,74 +14,137 @@ class InstagramProvider extends BaseProvider {
         return match[1];
     }
 
-    async fetch(url) {
-        const username = this.extractUsername(url);
-        const { page, context } = await createPage();
+//     async fetch(url) {
+//         const username = this.extractUsername(url);
+//         const { page, context } = await createPage();
 
-const graphQLPromise = page.waitForResponse(
-    async (response) => {
-        try {
-            const responseUrl = response.url();
-            const contentType =
-                response.headers()["content-type"] || "";
+// const graphQLPromise = page.waitForResponse(
+//     async (response) => {
+//         try {
+//             const responseUrl = response.url();
+//             const contentType =
+//                 response.headers()["content-type"] || "";
 
-            if (
-                response.status() !== 200 ||
-                !contentType.includes("application/json")
-            ) {
-                return false;
-            }
+//             if (
+//                 response.status() !== 200 ||
+//                 !contentType.includes("application/json")
+//             ) {
+//                 return false;
+//             }
 
-            if (
-                !responseUrl.includes("/graphql") &&
-                !responseUrl.includes("/api/")
-            ) {
-                return false;
-            }
+//             if (
+//                 !responseUrl.includes("/graphql") &&
+//                 !responseUrl.includes("/api/")
+//             ) {
+//                 return false;
+//             }
 
-            const json = await response.json();
+//             const json = await response.json();
 
-            return !!json?.data?.user?.edge_owner_to_timeline_media?.edges;
+//             return !!json?.data?.user?.edge_owner_to_timeline_media?.edges;
 
-        } catch {
-            return false;
-        }
-    },
-    {
-        timeout: 10000,
-    }
-);
+//         } catch {
+//             return false;
+//         }
+//     },
+//     {
+//         timeout: 10000,
+//     }
+// );
 
-try {
+// try {
 
-    await page.goto(
-        `https://www.instagram.com/${username}/`,
-        {
-            waitUntil: "domcontentloaded",
-            timeout: 30000,
-        }
-    );
+//     await page.goto(
+//         `https://www.instagram.com/${username}/`,
+//         {
+//             waitUntil: "domcontentloaded",
+//             timeout: 30000,
+//         }
+//     );
+
+//     let graphResponse = null;
+
+//     try {
+//         const response = await graphQLPromise;
+//         graphResponse = await response.json();
+//     } catch (err) {
+//         console.warn(
+//     `⚠️ Failed to fetch Instagram timeline for @${username}: ${err.message}`
+// );
+//     }
+
+//     const profile = await this.fetchProfile(page, url);
+
+//     const items = await this.fetchContent(graphResponse);
+
+//     return this.normalize(profile, items);
+
+//    } finally {
+//     await context.close();
+//    }
+// }
+async fetch(url) {
+    const username = this.extractUsername(url);
+    const { page, context } = await createPage();
 
     let graphResponse = null;
 
+    const responseHandler = async (response) => {
     try {
-        const response = await graphQLPromise;
-        graphResponse = await response.json();
-    } catch (err) {
-        console.warn(
-    `⚠️ Failed to fetch Instagram timeline for @${username}: ${err.message}`
-);
+        const responseUrl = response.url();
+
+        if (
+            response.status() !== 200 ||
+            (!responseUrl.includes("/graphql") &&
+             !responseUrl.includes("/api/"))
+        ) {
+            return;
+        }
+
+        const contentType =
+            response.headers()["content-type"] || "";
+
+        if (!contentType.includes("application/json")) {
+            return;
+        }
+
+        const json = await response.json();
+
+        if (
+            json?.data?.user?.edge_owner_to_timeline_media?.edges
+        ) {
+            graphResponse = json;
+            console.log("✅ Instagram GraphQL response found");
+        }
+    } catch {
+        // Ignore unrelated responses
     }
+};
 
-    const profile = await this.fetchProfile(page, url);
+    page.on("response", responseHandler);
 
-    const items = await this.fetchContent(graphResponse);
+    try {
+        await page.goto(
+            `https://www.instagram.com/${username}/`,
+            {
+                waitUntil: "domcontentloaded",
+                timeout: 30000,
+            }
+        );
 
-    return this.normalize(profile, items);
+        // Give Instagram time to load the posts API response
+        await page.waitForTimeout(5000);
 
-   } finally {
-    await context.close();
-   }
+        const profile = await this.fetchProfile(page, url);
+
+        const items = await this.fetchContent(graphResponse);
+
+        return this.normalize(profile, items);
+
+    } finally {
+        page.off("response", responseHandler);
+        await context.close();
+    }
 }
 
     async fetchProfile(page, url) {
