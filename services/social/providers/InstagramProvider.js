@@ -110,13 +110,18 @@ async fetch(url) {
 
         const json = await response.json();
 
+        console.log("📡 Instagram API Response:", responseUrl);
+
+        console.dir(json, { depth: 3 });
+
         if (
             json?.data?.user?.edge_owner_to_timeline_media?.edges
         ) {
             graphResponse = json;
             console.log("✅ Instagram GraphQL response found");
         }
-    } catch {
+
+    } catch (err) {
         // Ignore unrelated responses
     }
 };
