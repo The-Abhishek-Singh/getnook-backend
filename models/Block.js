@@ -66,6 +66,16 @@ const blockSchema = new mongoose.Schema({
   },
 
   cachedData: mongoose.Schema.Types.Mixed,
+  location: {
+    type: { lat: Number, lng: Number },
+    _id: false,
+    default: undefined
+},
+  textAlign: {
+        type: String,
+        enum: ["left", "center", "right"],
+        default: "left"
+    },
 
   lastFetchedAt: Date
 },
@@ -112,7 +122,8 @@ const blockSchema = new mongoose.Schema({
   clicks: { type: Number, default: 0 },
   views: { type: Number, default: 0 },
 
-  order: { type: Number, default: 0, index: true }
+  order: { type: Number, default: 0, index: true },
+  
 
 }, { timestamps: true });
 

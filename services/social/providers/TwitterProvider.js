@@ -124,14 +124,73 @@ console.dir(testIds, { maxArrayLength: null });
         };
     }
 
-    async fetchContent(page) {
+//     async fetchContent(page) {
+
+//     const items = await page.locator("article").evaluateAll((articles) => {
+
+//         return articles.map(article => {
+
+//             const getMeta = (prop) =>
+//                 article.querySelector(`meta[itemprop="${prop}"]`)?.content || "";
+
+//             return {
+
+//                 id: article.getAttribute("data-tweet-id") || "",
+
+//                 shortcode: article.getAttribute("data-tweet-id") || "",
+
+//                 url: getMeta("url"),
+
+//                 thumbnail: getMeta("image"),
+
+//                 caption: getMeta("articleBody"),
+
+//                 comments: Number(getMeta("commentCount")) || 0,
+
+//                 timestamp: getMeta("datePublished")
+//                     ? new Date(getMeta("datePublished"))
+//                     : null,
+
+//                 type: getMeta("image") ? "image" : "text",
+
+//                 isVideo: false,
+
+//                 likes: 0,
+
+//                 retweets: 0
+//             };
+
+//         });
+
+//     });
+
+//     console.log(`✅ Found ${items.length} X posts`);
+
+//     console.dir(items, { depth: null });
+
+//     return items;
+// }
+
+async fetchContent(page) {
 
     const items = await page.locator("article").evaluateAll((articles) => {
 
         return articles.map(article => {
 
-            const getMeta = (prop) =>
-                article.querySelector(`meta[itemprop="${prop}"]`)?.content || "";
+            const getMeta = (prop) => {
+                const el = article.querySelector(`:scope > meta[itemprop="${prop}"]`);
+                return el?.content || "";
+            };
+
+            // Real tweet photo — actual rendered image, not schema.org author avatar
+            const photoEl = article.querySelector('[data-testid="tweetPhoto"] img');
+            const realThumbnail = photoEl?.src || "";
+
+            // ⬇️ ADD IT HERE — right after getMeta is defined, alongside photoEl
+            const captionEl = article.querySelector(':scope > meta[itemprop="text"]');
+            const caption = captionEl?.content || "";
+
+            const hasVideo = !!article.querySelector('[data-testid="videoPlayer"], video');
 
             return {
 
@@ -141,9 +200,9 @@ console.dir(testIds, { maxArrayLength: null });
 
                 url: getMeta("url"),
 
-                thumbnail: getMeta("image"),
+                thumbnail: realThumbnail,
 
-                caption: getMeta("articleBody"),
+                caption,   // ⬅️ use the new variable here instead of getMeta("articleBody")
 
                 comments: Number(getMeta("commentCount")) || 0,
 
@@ -151,9 +210,9 @@ console.dir(testIds, { maxArrayLength: null });
                     ? new Date(getMeta("datePublished"))
                     : null,
 
-                type: getMeta("image") ? "image" : "text",
+                type: hasVideo ? "video" : (realThumbnail ? "image" : "text"),
 
-                isVideo: false,
+                isVideo: hasVideo,
 
                 likes: 0,
 

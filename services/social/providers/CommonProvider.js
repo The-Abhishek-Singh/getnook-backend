@@ -46,11 +46,17 @@ class CommonProvider extends BaseProvider {
                         getMeta('meta[property="og:site_name"]') ||
                         "",
 
-                    favicon:
-                        getHref('link[rel="icon"]') ||
-                        getHref('link[rel="shortcut icon"]') ||
-                        getHref('link[rel*="icon"]') ||
-                        "/favicon.ico",
+                    favicon: (() => {
+    const icons = [...document.querySelectorAll('link[rel*="icon"]')]
+        .map(el => ({
+            href: el.href,
+            size: parseInt(el.getAttribute("sizes")?.split("x")[0]) || 0,
+        }))
+        .filter(icon => icon.href)
+        .sort((a, b) => b.size - a.size); // largest declared size first
+
+    return icons[0]?.href || "/favicon.ico";
+})(),
                 };
             });
 

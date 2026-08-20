@@ -30,6 +30,7 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const linkRoutes = require("./routes/linkRoutes");
 const testRoutes = require("./routes/testRoutes");
 const socialRoutes = require('./routes/imageRoute')
+const geoCodeRoutes = require("./routes/geoCodeRoutes")
 
 app.use("/api/test", testRoutes);
 
@@ -40,6 +41,7 @@ app.use('/api/upload', uploadRoutes);
 app.use("/api/links", linkRoutes);
 app.use('./api/analytics', analyticsRoutes);// updated analytics
 app.use("/api/social", socialRoutes);
+app.use('/api/geocode', geoCodeRoutes);
 
 
 app.use((req, res) => {

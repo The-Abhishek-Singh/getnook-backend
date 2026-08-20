@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema({
 
   profile: {
     displayName: { type: String, required: true, maxLength: 50 },
-    bio: { type: String, maxLength: 160, default: "" },
+    bio: { type: String, maxLength: 250, default: "" },
     avatarUrl: { type: String, default: "" },
     location: { type: String, default: "" }
   },
