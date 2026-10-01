@@ -31,8 +31,10 @@ const linkRoutes = require("./routes/linkRoutes");
 const testRoutes = require("./routes/testRoutes");
 const socialRoutes = require('./routes/imageRoute')
 const geoCodeRoutes = require("./routes/geoCodeRoutes")
+const healthRoutes = require("./routes/healthRoutes");
 
 app.use("/api/test", testRoutes);
+app.use(healthRoutes);
 
 app.use('/api/auth', authRoutes);// refresh token added , validation added
 app.use('/api/blocks', blockRoutes);// validation added/checked , aspect ratio added
